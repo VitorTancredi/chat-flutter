@@ -1,6 +1,6 @@
 # chat_flutter
 
-Chat with flutter and firebase
+A Chat Application With Flutter and Firebase :)
 
 ## Getting Started
 

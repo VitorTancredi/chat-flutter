@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class TextComposer extends StatefulWidget {
   const TextComposer({this.callback});
 
-  final Function(String) callback;
+  final Function({String text, File imgFile}) callback;
 
   @override
   _TextComposerState createState() => _TextComposerState();
@@ -19,7 +22,14 @@ class _TextComposerState extends State<TextComposer> {
       children: [
         IconButton(
           icon: Icon(Icons.photo_camera),
-          onPressed: () => {},
+          onPressed: () async {
+            final file =
+                await ImagePicker.pickImage(source: ImageSource.camera);
+            if (file == null)
+              return;
+            else
+              widget.callback(imgFile: file);
+          },
         ),
         Expanded(
           child: TextField(
@@ -38,7 +48,7 @@ class _TextComposerState extends State<TextComposer> {
   }
 
   void _resetController() {
-    widget.callback(_controller.text);
+    widget.callback(text: _controller.text);
     _controller.clear();
     setState(() => _isComposing = false);
   }
