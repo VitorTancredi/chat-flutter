@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:chat_flutter/screens/components/chat_messages.dart';
-import 'package:chat_flutter/screens/components/text_composer.dart';
+import 'package:chat_flutter/screens/chat/components/chat_messages.dart';
+import 'package:chat_flutter/screens/chat/components/text_composer.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -17,10 +17,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final GlobalKey<ScaffoldState> _scafoldKey = GlobalKey<ScaffoldState>();
   final GoogleSignIn googleSignIn = GoogleSignIn();
   FirebaseUser _currentUser;
+  bool _isLoading;
 
   @override
   void initState() {
     super.initState();
+    _isLoading = false;
     FirebaseAuth.instance.onAuthStateChanged
         .listen((user) => setState(() => _currentUser = user));
   }
@@ -29,32 +31,47 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scafoldKey,
-      appBar: AppBar(
-        title: Text(_currentUser != null
-            ? 'Olá, ${_currentUser.displayName}'
-            : 'Chat App'),
-        elevation: 0,
-        actions: [
-          _currentUser != null
-              ? IconButton(
-                  icon: Icon(Icons.exit_to_app),
-                  onPressed: () {
-                    FirebaseAuth.instance.signOut();
-                    googleSignIn.signOut();
-                    _scafoldKey.currentState.showSnackBar(SnackBar(
-                      content: Text("você deslogou com sucesso"),
-                      backgroundColor: Colors.black,
-                    ));
-                  })
-              : Container(),
-        ],
-      ),
+      appBar: _appBar(),
       body: Column(
         children: [
           _allMessages(),
+          Visibility(
+            visible: _isLoading,
+            child: LinearProgressIndicator(),
+          ),
           _textComposer(),
         ],
       ),
+    );
+  }
+
+  Widget _appBar() {
+    return AppBar(
+      title: Text(_currentUser != null
+          ? 'Hi, ${_currentUser.displayName}'
+          : 'Chat App'),
+      elevation: 0,
+      actions: [_logOutButton()],
+    );
+  }
+
+  Widget _logOutButton() {
+    return _currentUser != null
+        ? IconButton(
+            icon: Icon(Icons.exit_to_app),
+            onPressed: () {
+              FirebaseAuth.instance.signOut();
+              googleSignIn.signOut();
+              _showsSnackBar('You have successfully logged out');
+            },
+          )
+        : Container();
+  }
+
+  Widget _textComposer() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+      child: TextComposer(callback: _sendMessage),
     );
   }
 
@@ -74,6 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final FirebaseUser user = authResult.user;
       return user;
     } catch (_) {
+      _showsSnackBar('Login Error');
       return null;
     }
   }
@@ -109,44 +127,46 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _textComposer() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-      child: TextComposer(callback: _sendMessage),
-    );
-  }
-
   void _sendMessage({String text, File imgFile}) async {
     final FirebaseUser user = await _getUser();
 
     if (user == null) {
-      _scafoldKey.currentState.showSnackBar(SnackBar(
-        content: Text("Não foi possível fazer o login"),
+      _showsSnackBar('Login error');
+    } else {
+      setState(() => _isLoading = true);
+      Map<String, dynamic> data = {
+        "userId": user.uid,
+        "senderName": user.displayName,
+        "senderPhotoUrl": user.photoUrl,
+        "time": Timestamp.now(),
+      };
+
+      if (imgFile != null) {
+        StorageUploadTask task = FirebaseStorage.instance
+            .ref()
+            .child(user.uid + DateTime.now().microsecondsSinceEpoch.toString())
+            .putFile(imgFile);
+
+        final taskSnapshot = await task.onComplete;
+        final url = await taskSnapshot.ref.getDownloadURL();
+        data['imgUrl'] = url;
+      }
+
+      if (text != null && text.isNotEmpty) {
+        data['text'] = text;
+      }
+
+      Firestore.instance.collection('messages').add(data);
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showsSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
         backgroundColor: Colors.black,
-      ));
-    }
-    Map<String, dynamic> data = {
-      "userId": user.uid,
-      "senderName": user.displayName,
-      "senderPhotoUrl": user.photoUrl,
-      "time": Timestamp.now(),
-    };
-
-    if (imgFile != null) {
-      StorageUploadTask task = FirebaseStorage.instance
-          .ref()
-          .child(DateTime.now().microsecondsSinceEpoch.toString())
-          .putFile(imgFile);
-
-      final taskSnapshot = await task.onComplete;
-      final url = await taskSnapshot.ref.getDownloadURL();
-      data['imgUrl'] = url;
-    }
-
-    if (text != null && text.isNotEmpty) {
-      data['text'] = text;
-    }
-
-    Firestore.instance.collection('messages').add(data);
+      ),
+    );
   }
 }

@@ -2,6 +2,7 @@
 
 A Chat Application With Flutter and Firebase :)
 
+![Screenshot](chat_flutter_snapshot.png)
 ## Getting Started
 
 This project is a starting point for a Flutter application.
